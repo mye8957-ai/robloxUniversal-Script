@@ -1,0 +1,72 @@
+-- Roblox 250米玩家描边脚本（实时更新+描边过渡+优化射线检测）
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+local DETECTION_RADIUS = 250
+
+local enabled = true -- 默认开启描边
+
+local playerHighlights = {}
+
+-- 创建或获取描边
+local function getHighlight(player)
+    if playerHighlights[player] then return playerHighlights[player] end
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = player.Character
+    highlight.FillTransparency = 1
+    highlight.OutlineTransparency = 0
+    highlight.OutlineColor = Color3.fromRGB(255,0,0)
+    highlight.Parent = Workspace
+    playerHighlights[player] = highlight
+    return highlight
+end
+
+-- 平滑改变颜色
+local function tweenColor(highlight, color)
+    TweenService:Create(highlight, TweenInfo.new(0.2), {OutlineColor = color}):Play()
+end
+
+-- 检测玩家是否被遮挡
+local function isObstructed(fromPos, targetHRP)
+    local ray = Ray.new(fromPos, (targetHRP.Position - fromPos).Unit * (targetHRP.Position - fromPos).Magnitude)
+    local ignoreList = {LocalPlayer.Character, targetHRP.Parent}
+    local part = Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+    return part ~= nil
+end
+
+-- 每帧更新描边
+RunService.RenderStepped:Connect(function()
+    if not enabled then return end
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+    local myPos = myChar.HumanoidRootPart.Position
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local distance = (hrp.Position - myPos).Magnitude
+            if distance <= DETECTION_RADIUS then
+                local highlight = getHighlight(player)
+                if isObstructed(myPos, hrp) then
+                    tweenColor(highlight, Color3.fromRGB(0,255,0))
+                else
+                    tweenColor(highlight, Color3.fromRGB(255,0,0))
+                end
+            else
+                if playerHighlights[player] then
+                    playerHighlights[player]:Destroy()
+                    playerHighlights[player] = nil
+                end
+            end
+        else
+            if playerHighlights[player] then
+                playerHighlights[player]:Destroy()
+                playerHighlights[player] = nil
+            end
+        end
+    end
+end)
